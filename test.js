@@ -218,6 +218,35 @@ async function testDownloadPdf() {
 }
 
 // ==========================================
+// 6. ENDPOINT TRANSPORTADORAS (GET)
+// ==========================================
+async function testDistributionCompanies() {
+    console.log("\n=========================================");
+    console.log("🚚 PROBANDO ENDPOINT: dropi-distribution-companies");
+    console.log("=========================================");
+    try {
+        const distroResponse = await axios.get(`${PROJECT_URL}/dropi-distribution-companies?visible_only=true`);
+        console.log("✅ [DISTRIBUTION COMPANIES OK] Status:", distroResponse.status);
+        const responseData = distroResponse.data;
+        
+        let distroCount = 0;
+        const distroList = responseData.objects || responseData.data || responseData;
+        
+        if (Array.isArray(distroList)) {
+            distroCount = distroList.length;
+            console.log(`🚚 Se obtuvieron ${distroCount} transportadoras (Habilitadas/Visibles).`);
+            console.table(distroList.map(t => ({
+                ID: t.id,
+                Nombre: t.name,
+                Activa: t.is_visible
+            })));
+        }
+    } catch (error) {
+        console.error("❌ Error en Distribution Companies:", error.response ? error.response.data : error.message);
+    }
+}
+
+// ==========================================
 // CICLO PRINCIPAL (MENU)
 // ==========================================
 async function showMenu() {
@@ -230,16 +259,18 @@ async function showMenu() {
         console.log("2. Consultar Filtros Geográficos (dropi-departments)");
         console.log("3. Crear Orden de Ejemplo (dropi-create-order)");
         console.log("4. Descargar PDF de Guía (dropi-download-pdf)");
+        console.log("5. Consultar Transportadoras (dropi-distribution-companies)");
         console.log("0. Salir de la Prueba");
         console.log("=========================================");
         
-        const answer = await askQuestion("Elige una opción (0-4): ");
+        const answer = await askQuestion("Elige una opción (0-5): ");
         
         switch (answer.trim()) {
             case '1': await testOrders(); break;
             case '2': await testDepartments(); break;
             case '3': await testCreateOrder(); break;
             case '4': await testDownloadPdf(); break;
+            case '5': await testDistributionCompanies(); break;
             case '0': 
                 console.log("👋 Saliendo del programa...");
                 exit = true; 

@@ -247,6 +247,98 @@ async function testDistributionCompanies() {
 }
 
 // ==========================================
+// 7. ORQUESTACIÓN COTIZADOR (GET -> POST -> POST)
+// ==========================================
+async function testFreightQuoter() {
+    console.log("\n=========================================");
+    console.log("🚚 PROBANDO ENDPOINT: Cotizador de Fletes (Orquestación)");
+    console.log("=========================================");
+    
+    // Variables de prueba
+    const PRODUCT_ID = 1297563;
+    const DESTINATION_STRING = "bogota, cundinamarca"; 
+    const DANE_DESTINO = "11001000"; // Bogotá DANE
+    
+    try {
+        // [PASO 1] Consultar Producto
+        console.log(`[Paso 1] Consultando ficha técnica del producto ID: ${PRODUCT_ID} (dropi-product)...`);
+        const prodResponse = await axios.get(`${PROJECT_URL}/dropi-product?id=${PRODUCT_ID}`);
+        const productData = prodResponse.data.objects || prodResponse.data;
+        if (!productData || !productData.id) {
+            console.log("❌ No se encontró el producto.");
+            return;
+        }
+        console.log(`✅ Producto encontrado: ${productData.name} (Sugerido: $${productData.suggested_price})`);
+
+        // [PASO 2] Consultar Bodega Origen
+        console.log(`\n[Paso 2] Calculando bodega origen para el destino: ${DESTINATION_STRING} (dropi-origin-city)...`);
+        const originResponse = await axios.post(`${PROJECT_URL}/dropi-origin-city`, {
+            id: PRODUCT_ID,
+            destination: DESTINATION_STRING,
+            type: "SIMPLE"
+        }, { headers: { 'Content-Type': 'application/json' }});
+        
+        const originData = originResponse.data.data;
+        const codDaneOrigen = originData?.warehouse?.city?.cod_dane || originData?.city_dropi?.cod_dane;
+        
+        if (!codDaneOrigen) {
+            console.log("❌ Falló la obtención de origen.");
+            return;
+        }
+        console.log(`✅ Bodega origen seleccionada por Dropi: ${originData?.warehouse?.name} (DANE: ${codDaneOrigen})`);
+
+        // [PASO 3] Consultar Tarifas a Transportadoras
+        console.log(`\n[Paso 3] Ensamblando payload mssivo y cotizando tarifas (dropi-quote-shipping)...`);
+        const quotePayload = {
+            peso: productData.weight || 1,
+            largo: productData.length || 1,
+            ancho: productData.width || 1,
+            alto: productData.height || 1,
+            ValorDeclarado: productData.sale_price || productData.suggested_price || 260000,
+            EnvioConCobro: true, 
+            insurance: false,
+            ciudad_remitente: originData.warehouse?.city || originData.city_dropi || { cod_dane: codDaneOrigen },
+            ciudad_destino: {
+                id: 50,
+                name: "BOGOTA",
+                cod_dane: DANE_DESTINO
+            },
+            warehouse: originData.warehouse || null,
+            destination_name: "Kevin villamil",
+            destination_phone: "3224527647",
+            amount: 75000,
+            products: [
+                {
+                    ...productData,
+                    quantity: 1
+                }
+            ]
+        };
+
+        const quoteResponse = await axios.post(`${PROJECT_URL}/dropi-quote-shipping`, quotePayload, {
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const transportadorasOpts = quoteResponse.data.objects || [];
+        
+        console.log(`\n🎉 ¡COTIZACIÓN EXITOSA! Se encontraron ${transportadorasOpts.length} opciones habilitadas (Ordenadas por precio):`);
+        
+        if (transportadorasOpts.length > 0) {
+            console.table(transportadorasOpts.map(t => ({
+                Transportadora: t.transportadora,
+                Costo: `$${t.objects?.precioEnvio}`,
+                Trayecto: t.objects?.trayecto || 'N/A'
+            })));
+        } else {
+            console.log("⚠️ No se devolvieron tarifas para esa ruta.");
+        }
+
+    } catch (error) {
+        console.error("❌ Error en el flujo del cotizador:", error.response ? error.response.data : error.message);
+    }
+}
+
+// ==========================================
 // CICLO PRINCIPAL (MENU)
 // ==========================================
 async function showMenu() {
@@ -260,10 +352,11 @@ async function showMenu() {
         console.log("3. Crear Orden de Ejemplo (dropi-create-order)");
         console.log("4. Descargar PDF de Guía (dropi-download-pdf)");
         console.log("5. Consultar Transportadoras (dropi-distribution-companies)");
+        console.log("6. Probar Cotizador Completo Multitransportadora");
         console.log("0. Salir de la Prueba");
         console.log("=========================================");
         
-        const answer = await askQuestion("Elige una opción (0-5): ");
+        const answer = await askQuestion("Elige una opción (0-6): ");
         
         switch (answer.trim()) {
             case '1': await testOrders(); break;
@@ -271,6 +364,7 @@ async function showMenu() {
             case '3': await testCreateOrder(); break;
             case '4': await testDownloadPdf(); break;
             case '5': await testDistributionCompanies(); break;
+            case '6': await testFreightQuoter(); break;
             case '0': 
                 console.log("👋 Saliendo del programa...");
                 exit = true; 

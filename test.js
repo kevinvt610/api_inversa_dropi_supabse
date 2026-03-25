@@ -260,8 +260,15 @@ async function testFreightQuoter() {
     const DANE_DESTINO = "11001000"; // Bogotá DANE
     
     try {
-        // [PASO 1] Consultar Bodega Origen
-        console.log(`[Paso 1] Calculando bodega origen producto ${PRODUCT_ID} → destino: ${DESTINATION_STRING}...`);
+        // ─────────────────────────────────────────────────
+        // PASO 1: dropi-origin-city
+        // ➡️  RECIBE: { id: ID_PRODUCTO, destination: "ciudad, departamento", type: "SIMPLE" }
+        // ⬅️  DEVUELVE: { warehouse: { name, city: { cod_dane } }, city_dropi: { cod_dane } }
+        //    → Nos dice en qué bodega está el producto y su código DANE de origen
+        // ─────────────────────────────────────────────────
+        console.log(`\n[PASO 1/2] → ENDPOINT: dropi-origin-city`);
+        console.log(`    URL Target: POST https://api.dropi.co/api/orders/getOriginCityForCalculateShipping`);
+        console.log(`    Enviando: { id: ${PRODUCT_ID}, destination: "${DESTINATION_STRING}", type: "SIMPLE" }`);
         let originData;
         try {
             const originResponse = await axios.post(`${PROJECT_URL}/dropi-origin-city`, {
@@ -269,7 +276,7 @@ async function testFreightQuoter() {
                 destination: DESTINATION_STRING,
                 type: "SIMPLE"
             }, { headers: { 'Content-Type': 'application/json' }});
-            console.log(`   📦 Respuesta raw Paso 1 (status ${originResponse.status}):`, JSON.stringify(originResponse.data).substring(0, 300));
+            console.log(`    ← Status: ${originResponse.status}`);
             originData = originResponse.data.data;
         } catch (err) {
             console.error(`   ❌ [FALLO EN PASO 1 - dropi-origin-city]:`);
@@ -282,10 +289,19 @@ async function testFreightQuoter() {
             console.log("❌ [PASO 1] Falló obtención de ciudad origen. data:", JSON.stringify(originData));
             return;
         }
-        console.log(`✅ Bodega origen seleccionada por Dropi: ${originData?.warehouse?.name || 'desconocida'} (DANE: ${codDaneOrigen})`);
+        console.log(`    ← Respuesta clave:`);
+        console.log(`       ✅ Bodega: '${originData?.warehouse?.name || '?'}' | DANE Origen: ${codDaneOrigen}`);
+        console.log(`       ciudad remitente: ${JSON.stringify(originData?.warehouse?.city || originData?.city_dropi)}`);
 
-        // [PASO 2] Cotizar fletes (cotizaEnvioTransportadoraV2)
-        console.log(`\n[Paso 2] Ensamblando payload y cotizando tarifas (dropi-quote-shipping)...`);
+        // ─────────────────────────────────────────────────
+        // PASO 2: dropi-quote-shipping
+        // ➡️  RECIBE: { peso, largo, ancho, alto, ValorDeclarado, EnvioConCobro, ciudad_remitente, ciudad_destino, warehouse, ... }
+        // ⬅️  DEVUELVE: objects[] → [ { transportadora, objects: { precioEnvio, trayecto } } ]
+        //    → Retorna la lista de precios de envío de TODAS las transportadoras activas
+        //      (ya filtrado y ordenado de menor a mayor por nuestra Edge Function)
+        // ─────────────────────────────────────────────────
+        console.log(`\n[PASO 2/2] → ENDPOINT: dropi-quote-shipping`);
+        console.log(`    URL Target: POST https://api.dropi.co/api/orders/cotizaEnvioTransportadoraV2`);
         const quotePayload = {
             // Dimensiones por defecto (endpoint de producto restringido en Dropi para productos privados)
             peso: 1, largo: 1, ancho: 1, alto: 1,
@@ -301,12 +317,18 @@ async function testFreightQuoter() {
             products: [{ id: PRODUCT_ID, quantity: 1, type: "SIMPLE" }]
         };
 
+        console.log(`    Enviando payload con:`);
+        console.log(`       - ciudad_remitente DANE: ${codDaneOrigen}`);
+        console.log(`       - ciudad_destino DANE: ${DANE_DESTINO} (Bogotá)`);
+        console.log(`       - peso/dims: 1x1x1 | ValorDeclarado: $260.000 | ConRecaudo: true`);
+        console.log(`       - products: [{ id: ${PRODUCT_ID}, quantity: 1 }]`);
+
         let quoteResponse;
         try {
             quoteResponse = await axios.post(`${PROJECT_URL}/dropi-quote-shipping`, quotePayload, {
                 headers: { 'Content-Type': 'application/json' }
             });
-            console.log(`   📦 Respuesta raw Paso 2 (status ${quoteResponse.status}):`, JSON.stringify(quoteResponse.data).substring(0, 200));
+            console.log(`    ← Status: ${quoteResponse.status}`);
         } catch (err) {
             console.error(`   ❌ [FALLO EN PASO 2 - dropi-quote-shipping]:`);
             console.error(`      Status:`, err.response?.status);

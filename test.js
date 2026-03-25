@@ -254,71 +254,65 @@ async function testFreightQuoter() {
     console.log("🚚 PROBANDO ENDPOINT: Cotizador de Fletes (Orquestación)");
     console.log("=========================================");
     
-    // Variables de prueba interactivas
     let productIdInput = await askQuestion("Ingresa el ID del Producto (Presiona Enter para usar 1297563): ");
-    const PRODUCT_ID = productIdInput.trim() || "1297563";
+    const PRODUCT_ID = parseInt(productIdInput.trim() || "1297563");
     const DESTINATION_STRING = "bogota, cundinamarca"; 
     const DANE_DESTINO = "11001000"; // Bogotá DANE
     
     try {
-        // [PASO 1] Consultar Producto
-        console.log(`[Paso 1] Consultando ficha técnica del producto ID: ${PRODUCT_ID} (dropi-product)...`);
-        const prodResponse = await axios.get(`${PROJECT_URL}/dropi-product?id=${PRODUCT_ID}`);
-        const productData = prodResponse.data.objects || prodResponse.data;
-        if (!productData || !productData.id) {
-            console.log("❌ No se encontró el producto.");
+        // [PASO 1] Consultar Bodega Origen
+        console.log(`[Paso 1] Calculando bodega origen producto ${PRODUCT_ID} → destino: ${DESTINATION_STRING}...`);
+        let originData;
+        try {
+            const originResponse = await axios.post(`${PROJECT_URL}/dropi-origin-city`, {
+                id: PRODUCT_ID,
+                destination: DESTINATION_STRING,
+                type: "SIMPLE"
+            }, { headers: { 'Content-Type': 'application/json' }});
+            console.log(`   📦 Respuesta raw Paso 1 (status ${originResponse.status}):`, JSON.stringify(originResponse.data).substring(0, 300));
+            originData = originResponse.data.data;
+        } catch (err) {
+            console.error(`   ❌ [FALLO EN PASO 1 - dropi-origin-city]:`);
+            console.error(`      Status:`, err.response?.status);
+            console.error(`      Respuesta:`, JSON.stringify(err.response?.data));
             return;
         }
-        console.log(`✅ Producto encontrado: ${productData.name} (Sugerido: $${productData.suggested_price})`);
-
-        // [PASO 2] Consultar Bodega Origen
-        console.log(`\n[Paso 2] Calculando bodega origen para el destino: ${DESTINATION_STRING} (dropi-origin-city)...`);
-        const originResponse = await axios.post(`${PROJECT_URL}/dropi-origin-city`, {
-            id: PRODUCT_ID,
-            destination: DESTINATION_STRING,
-            type: "SIMPLE"
-        }, { headers: { 'Content-Type': 'application/json' }});
-        
-        const originData = originResponse.data.data;
         const codDaneOrigen = originData?.warehouse?.city?.cod_dane || originData?.city_dropi?.cod_dane;
-        
         if (!codDaneOrigen) {
-            console.log("❌ Falló la obtención de origen.");
+            console.log("❌ [PASO 1] Falló obtención de ciudad origen. data:", JSON.stringify(originData));
             return;
         }
-        console.log(`✅ Bodega origen seleccionada por Dropi: ${originData?.warehouse?.name} (DANE: ${codDaneOrigen})`);
+        console.log(`✅ Bodega origen seleccionada por Dropi: ${originData?.warehouse?.name || 'desconocida'} (DANE: ${codDaneOrigen})`);
 
-        // [PASO 3] Consultar Tarifas a Transportadoras
-        console.log(`\n[Paso 3] Ensamblando payload mssivo y cotizando tarifas (dropi-quote-shipping)...`);
+        // [PASO 2] Cotizar fletes (cotizaEnvioTransportadoraV2)
+        console.log(`\n[Paso 2] Ensamblando payload y cotizando tarifas (dropi-quote-shipping)...`);
         const quotePayload = {
-            peso: productData.weight || 1,
-            largo: productData.length || 1,
-            ancho: productData.width || 1,
-            alto: productData.height || 1,
-            ValorDeclarado: productData.sale_price || productData.suggested_price || 260000,
+            // Dimensiones por defecto (endpoint de producto restringido en Dropi para productos privados)
+            peso: 1, largo: 1, ancho: 1, alto: 1,
+            ValorDeclarado: 260000,
             EnvioConCobro: true, 
             insurance: false,
             ciudad_remitente: originData.warehouse?.city || originData.city_dropi || { cod_dane: codDaneOrigen },
-            ciudad_destino: {
-                id: 50,
-                name: "BOGOTA",
-                cod_dane: DANE_DESTINO
-            },
+            ciudad_destino: { id: 50, name: "BOGOTA", cod_dane: DANE_DESTINO },
             warehouse: originData.warehouse || null,
             destination_name: "Kevin villamil",
             destination_phone: "3224527647",
             amount: 75000,
-            products: [
-                {
-                    ...productData,
-                    quantity: 1
-                }
-            ]
+            products: [{ id: PRODUCT_ID, quantity: 1, type: "SIMPLE" }]
         };
 
-        const quoteResponse = await axios.post(`${PROJECT_URL}/dropi-quote-shipping`, quotePayload, {
-            headers: { 'Content-Type': 'application/json' }
-        });
+        let quoteResponse;
+        try {
+            quoteResponse = await axios.post(`${PROJECT_URL}/dropi-quote-shipping`, quotePayload, {
+                headers: { 'Content-Type': 'application/json' }
+            });
+            console.log(`   📦 Respuesta raw Paso 2 (status ${quoteResponse.status}):`, JSON.stringify(quoteResponse.data).substring(0, 200));
+        } catch (err) {
+            console.error(`   ❌ [FALLO EN PASO 2 - dropi-quote-shipping]:`);
+            console.error(`      Status:`, err.response?.status);
+            console.error(`      Respuesta:`, JSON.stringify(err.response?.data));
+            return;
+        }
         
         const transportadorasOpts = quoteResponse.data.objects || [];
         

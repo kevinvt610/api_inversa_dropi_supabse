@@ -302,10 +302,10 @@ async function testFreightQuoter() {
         // ─────────────────────────────────────────────────
         console.log(`\n[PASO 2/2] → ENDPOINT: dropi-quote-shipping`);
         console.log(`    URL Target: POST https://api.dropi.co/api/orders/cotizaEnvioTransportadoraV2`);
+        const VALOR_PRODUCTO = 260000; // precio de venta del producto
         const quotePayload = {
-            // Dimensiones por defecto (endpoint de producto restringido en Dropi para productos privados)
-            peso: 1, largo: 1, ancho: 1, alto: 1,
-            ValorDeclarado: 260000,
+            peso: 1, largo: 10, ancho: 10, alto: 10,  // dims reales del producto (ESPADA MOTOSIERRA)
+            ValorDeclarado: VALOR_PRODUCTO,
             EnvioConCobro: true, 
             insurance: false,
             ciudad_remitente: originData.warehouse?.city || originData.city_dropi || { cod_dane: codDaneOrigen },
@@ -313,8 +313,13 @@ async function testFreightQuoter() {
             warehouse: originData.warehouse || null,
             destination_name: "Kevin villamil",
             destination_phone: "3224527647",
-            amount: 75000,
-            products: [{ id: PRODUCT_ID, quantity: 1, type: "SIMPLE" }]
+            // 🔑 CLAVE: amount = valor a RECAUDAR del cliente.
+            // Las transportadoras cobran ~3.5% de este valor como comisión de recaudo.
+            // Si se pone incorrecto, los precios quedan mal calculados.
+            amount: VALOR_PRODUCTO,
+            products: [{ id: PRODUCT_ID, quantity: 1, type: "SIMPLE",
+                peso: 1, largo: 10, ancho: 10, alto: 10,
+                sale_price: "250000.00", suggested_price: "260000.00" }]
         };
 
         console.log(`    Enviando payload con:`);

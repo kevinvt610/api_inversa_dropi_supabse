@@ -115,6 +115,45 @@ async function testSupabaseFunctions() {
                 console.log(JSON.stringify(firstCity, null, 2));
             }
 
+            console.log("\n=========================================");
+            console.log("➡️ PROBANDO ENDPOINT: dropi-create-order (Fallo intencional)");
+            console.log("=========================================");
+
+            const fakeOrderPayload = {
+                "calculate_costs_and_shiping": true,
+                "state": "CUNDINAMARCA",
+                "city": "BOGOTA",
+                "client_email": "correo_test@gmail.com",
+                "name": "kevin",
+                "surname": "tovar",
+                "dir": "direccion_test 123",
+                "notes": "esta orden es de prueba",
+                "payment_method_id": 1,
+                "phone": "313523645",
+                "rate_type": "CON RECAUDO",
+                "type": "FINAL_ORDER",
+                "total_order": 280000,
+                "products": [
+                    {
+                    "id": 1297563,
+                    "price": 280000,
+                    "variation_id": null,
+                    "quantity": 1
+                    }
+                ]
+            };
+
+            try {
+                const orderResponse = await axios.post(`${PROJECT_URL}/dropi-create-order`, fakeOrderPayload, {
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                console.log("✅ [CREATE ORDER OK] Status:", orderResponse.status);
+                console.log("Respuesta:", JSON.stringify(orderResponse.data, null, 2));
+            } catch (orderError) {
+                console.log("❌ [CREATE ORDER FALLÓ ESPERADAMENTE] Status:", orderError.response?.status);
+                console.log("Mensaje de error (Dropi):", JSON.stringify(orderError.response?.data, null, 2));
+            }
+
         } else {
             console.log("❌ Falló el Login. Respuesta:", loginResponse.data);
         }

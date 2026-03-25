@@ -254,8 +254,9 @@ async function testFreightQuoter() {
     console.log("🚚 PROBANDO ENDPOINT: Cotizador de Fletes (Orquestación)");
     console.log("=========================================");
     
-    // Variables de prueba
-    const PRODUCT_ID = 1297563;
+    // Variables de prueba interactivas
+    let productIdInput = await askQuestion("Ingresa el ID del Producto (Presiona Enter para usar 1297563): ");
+    const PRODUCT_ID = productIdInput.trim() || "1297563";
     const DESTINATION_STRING = "bogota, cundinamarca"; 
     const DANE_DESTINO = "11001000"; // Bogotá DANE
     

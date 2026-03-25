@@ -361,7 +361,58 @@ async function testFreightQuoter() {
 }
 
 // ==========================================
-// CICLO PRINCIPAL (MENU)
+// 7. NOVEDADES PENDIENTES (dropi-pending-incidences)
+// ==========================================
+async function testPendingIncidences() {
+    console.log("\n=========================================");
+    console.log("⚠️ PROBANDO ENDPOINT: Novedades Pendientes (dropi-pending-incidences)");
+    console.log("=========================================");
+    console.log("  ➡️  URL Dropi: GET /api/orders/myorders");
+    console.log("  ➡️  Filtros inyectados: haveIncidenceProcesamiento=true & issue_solved_by_parent_order=false");
+
+    try {
+        // Parámetros opcionales interactivos
+        let fromDate = await askQuestion("Desde fecha (yyyy-mm-dd, Enter para omitir): ");
+        let untilDate = await askQuestion("Hasta fecha (yyyy-mm-dd, Enter para omitir): ");
+        let resultNum = await askQuestion("Cuántas novedades traer (Enter para usar 20): ");
+
+        const params = new URLSearchParams({
+            result_number: resultNum.trim() || '20',
+            start: '1',
+        });
+        if (fromDate.trim())  params.set('from_date_last_incidence', fromDate.trim());
+        if (untilDate.trim()) params.set('until_date_last_incidence', untilDate.trim());
+
+        console.log(`\n  📤 Consultando novedades...`);
+        const response = await axios.get(`${PROJECT_URL}/dropi-pending-incidences?${params.toString()}`);
+        const data = response.data;
+
+        const incidencias = data.objects || [];
+        console.log(`\n  ⬅️  Status: ${response.status} | Total encontradas: ${data.count ?? incidencias.length}`);
+
+        if (incidencias.length === 0) {
+            console.log("  ✅ No hay novedades pendientes en ese rango. ✨");
+            return;
+        }
+
+        console.log(`\n  Primeras ${incidencias.length} novedad(es):\n`);
+        console.table(incidencias.map(o => ({
+            ID: o.id,
+            Referencia: o.reference,
+            Estado: o.state,
+            Cliente: o.name,
+            Teléfono: o.phone,
+            Ciudad: o.city,
+            Novedad: o.novedad_servientrega || '(sin campo)',
+            Transportadora: o.distribution_company,
+            Fecha: o.last_incidence_date || o.created_at,
+        })));
+
+    } catch (err) {
+        console.error("\n  ❌ Error:", err.response ? JSON.stringify(err.response.data) : err.message);
+    }
+}
+
 // ==========================================
 async function showMenu() {
     let exit = false;
@@ -375,10 +426,11 @@ async function showMenu() {
         console.log("4. Descargar PDF de Guía (dropi-download-pdf)");
         console.log("5. Consultar Transportadoras (dropi-distribution-companies)");
         console.log("6. Probar Cotizador Completo Multitransportadora");
+        console.log("⚠️ 7. Listar Novedades Pendientes (dropi-pending-incidences)");
         console.log("0. Salir de la Prueba");
         console.log("=========================================");
         
-        const answer = await askQuestion("Elige una opción (0-6): ");
+        const answer = await askQuestion("Elige una opción (0-7): ");
         
         switch (answer.trim()) {
             case '1': await testOrders(); break;
@@ -387,6 +439,7 @@ async function showMenu() {
             case '4': await testDownloadPdf(); break;
             case '5': await testDistributionCompanies(); break;
             case '6': await testFreightQuoter(); break;
+            case '7': await testPendingIncidences(); break;
             case '0': 
                 console.log("👋 Saliendo del programa...");
                 exit = true; 

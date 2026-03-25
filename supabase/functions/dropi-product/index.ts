@@ -41,8 +41,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    // URL CORRECTA: descubierta via ingeniería inversa del navegador
-    const targetUrl = `https://api.dropi.co/api/products/producList/v1/show/id=${productId}`;
+    // URL CORRECTA: el id va como query param (?id=), no como path variable
+    const targetUrl = `https://api.dropi.co/api/products/producList/v1/show?id=${productId}`;
     const response = await fetch(targetUrl, {
       method: 'GET',
       headers: { ...browserHeaders, 'x-authorization': authHeader }

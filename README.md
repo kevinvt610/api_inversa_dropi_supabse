@@ -1,6 +1,9 @@
 # API Inversa Dropi - Supabase Edge Functions
 
+> 📖 **[Ver Esquema Completo de la API →](./API_SCHEMA.md)** — Referencia de todos los endpoints, flujos de integración y arquitectura.
+
 Este proyecto es una implementación de **ingeniería inversa** de la API privada de **Dropi**. El objetivo principal es proporcionar un proxy optimizado mediante **Supabase Edge Functions** que replique y mejore el comportamiento de la API original, resolviendo problemas de CORS, reduciendo el peso de la información al cliente (frontend) y facilitando el uso automatizado de la plataforma.
+
 
 ## 🚀 Motivación y Ventajas
 

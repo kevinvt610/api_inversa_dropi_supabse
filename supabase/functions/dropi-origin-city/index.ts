@@ -24,7 +24,7 @@ Deno.serve(async (req) => {
     const targetUrl = `https://api.dropi.co/api/orders/getOriginCityForCalculateShipping`;
     const response = await fetch(targetUrl, {
       method: 'POST',
-      headers: { ...browserHeaders, 'Authorization': authHeader, 'x-authorization': authHeader, 'Content-Type': 'application/json' },
+      headers: { ...browserHeaders, 'x-authorization': authHeader, 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
     

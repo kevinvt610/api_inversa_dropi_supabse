@@ -426,7 +426,7 @@ async function showMenu() {
         console.log("4. Descargar PDF de Guía (dropi-download-pdf)");
         console.log("5. Consultar Transportadoras (dropi-distribution-companies)");
         console.log("6. Probar Cotizador Completo Multitransportadora");
-        console.log("⚠️ 7. Listar Novedades Pendientes (dropi-pending-incidences)");
+        console.log("7. Listar Novedades Pendientes (dropi-pending-incidences)");
         console.log("0. Salir de la Prueba");
         console.log("=========================================");
         

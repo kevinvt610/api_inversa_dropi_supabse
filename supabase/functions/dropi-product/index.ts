@@ -41,11 +41,11 @@ Deno.serve(async (req) => {
       );
     }
 
-    // URL CORRECTA: el id va como query param (?id=), no como path variable
-    const targetUrl = `https://api.dropi.co/api/products/producList/v1/show?id=${productId}`;
+    // URL CORRECTA según documentación: /api/products/{id} con Authorization estándar
+    const targetUrl = `https://api.dropi.co/api/products/${productId}`;
     const response = await fetch(targetUrl, {
       method: 'GET',
-      headers: { ...browserHeaders, 'x-authorization': authHeader }
+      headers: { ...browserHeaders, 'Authorization': authHeader, 'x-authorization': authHeader }
     });
 
     let data;

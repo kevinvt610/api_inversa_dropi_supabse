@@ -1,12 +1,10 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
-import { createClient } from "jsr:@supabase/supabase-js@2"
 import { corsHeaders } from "../_shared/cors.ts"
 import { browserHeaders } from "../_shared/dropi.ts"
+import { getAdminClient, getDropiToken, callDropiWithAutoRelogin } from "../_shared/dropi-auth.ts"
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   if (req.method !== 'GET') {
     return new Response(JSON.stringify({ error: "Method Not Allowed" }), {
@@ -15,30 +13,11 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-    
-    // Primero intentamos recuperar del Header por si el cliente lo manda forzado
-    let authHeader = req.headers.get('Authorization'); 
-    
-    // Si no lo mandan directo, lo buscamos en la DB persistida
-    if (!authHeader && supabaseUrl && supabaseKey) {
-        const supabase = createClient(supabaseUrl, supabaseKey);
-        const { data: dbData, error } = await supabase
-            .from('dropi_tokens')
-            .select('token')
-            .eq('id', 1)
-            .single();
-            
-        if (dbData && dbData.token) {
-            authHeader = `Bearer ${dbData.token}`;
-        } else if (error) {
-            console.error("Error buscando token en DB:", error);
-        }
-    }
+    const supabase = getAdminClient();
+    const auth = await getDropiToken(supabase);
 
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "No Authorization header provided nor token found in DB." }), {
+    if (!auth.token) {
+      return new Response(JSON.stringify({ error: "Integración Dropi no activa o token no disponible." }), {
         status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -47,26 +26,18 @@ Deno.serve(async (req) => {
     const resultNumber = url.searchParams.get('result_number') || '50';
     const start = url.searchParams.get('start') || '1';
 
-    const targetUrl = `https://api.dropi.co/api/orders/myorders?result_number=${resultNumber}&start=${start}`;
-
-    const response = await fetch(targetUrl, {
-      method: 'GET',
-      headers: { ...browserHeaders, 'Authorization': authHeader }
-    });
-    
-    let data;
-    const contentType = response.headers.get("content-type");
-    if (contentType && contentType.includes("application/json")) {
-      data = await response.json();
-    } else {
-      data = { error: "Non-JSON response from Dropi or Error", text: await response.text() };
-    }
+    const data = await callDropiWithAutoRelogin(supabase, auth, (bearerToken) =>
+      fetch(`https://api.dropi.co/api/orders/myorders?result_number=${resultNumber}&start=${start}`, {
+        method: 'GET',
+        headers: { ...browserHeaders, 'x-authorization': bearerToken },
+      })
+    );
 
     return new Response(JSON.stringify(data), {
-      status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
-  } catch (error) {
+  } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

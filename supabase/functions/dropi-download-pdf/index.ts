@@ -1,29 +1,17 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
-import { createClient } from "jsr:@supabase/supabase-js@2"
 import { corsHeaders } from "../_shared/cors.ts"
 import { browserHeaders } from "../_shared/dropi.ts"
+import { getAdminClient, getDropiToken, reloginDropi } from "../_shared/dropi-auth.ts"
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-    
-    // Obtener Token de la BD si no viene explicito
-    let authHeader = req.headers.get('Authorization'); 
-    if (!authHeader && supabaseUrl && supabaseKey) {
-        const supabase = createClient(supabaseUrl, supabaseKey);
-        const { data: dbData } = await supabase.from('dropi_tokens').select('token').eq('id', 1).single();
-        if (dbData && dbData.token) {
-            authHeader = `Bearer ${dbData.token}`;
-        }
-    }
+    const supabase = getAdminClient();
+    const auth = await getDropiToken(supabase);
 
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "No Token Provided or Found" }), {
+    if (!auth.token) {
+      return new Response(JSON.stringify({ error: "Integracion Dropi no activa o token no disponible." }), {
         status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -33,31 +21,41 @@ Deno.serve(async (req) => {
     const sticker = url.searchParams.get('sticker');
 
     if (!transportadora || !sticker) {
-        return new Response(JSON.stringify({ error: "Missing transportadora or sticker params" }), {
-            status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+      return new Response(JSON.stringify({ error: "Missing transportadora or sticker params" }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    // Ruta a Dropi para el PDF
     const targetUrl = `https://api.dropi.co/guias/${transportadora}/${sticker}`;
 
-    const response = await fetch(targetUrl, {
-      method: 'GET',
-      headers: { 
+    const fetchPdf = async (token: string) => {
+      return await fetch(targetUrl, {
+        method: 'GET',
+        headers: { 
           ...browserHeaders, 
-          'Authorization': authHeader,
-          'x-authorization': authHeader,
+          'x-authorization': `Bearer ${token}`,
           'Accept': 'application/pdf'
+        }
+      });
+    };
+
+    let response = await fetchPdf(auth.token);
+
+    // If unauthorized, retry once
+    if (response.status === 401 && auth.email && auth.password) {
+      console.log("[dropi-download-pdf] 401 Unauthorized for PDF. Attempting auto-relogin...");
+      const newToken = await reloginDropi(supabase, auth.email, auth.password);
+      if (newToken) {
+        response = await fetchPdf(newToken);
       }
-    });
+    }
 
     if (!response.ok) {
-        return new Response(JSON.stringify({ error: `Dropi responded with ${response.status}`, details: await response.text() }), {
-            status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+      return new Response(JSON.stringify({ error: `Dropi responded with ${response.status}`, details: await response.text() }), {
+        status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
     
-    // Devolver el binario PDF directamente
     const arrayBuffer = await response.arrayBuffer();
 
     return new Response(arrayBuffer, {

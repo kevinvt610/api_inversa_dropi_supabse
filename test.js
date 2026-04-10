@@ -2,7 +2,15 @@ require('dotenv').config();
 const axios = require('axios');
 const readline = require('readline');
 
-const PROJECT_URL = process.env.PROJECT_URL || "https://jhwgtihnpceyvuaqlkgb.supabase.co/functions/v1";
+const PROJECT_URL = process.env.PROJECT_URL || "https://mphngdkxxibdaegehlmj.supabase.co/functions/v1";
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1waG5nZGt4eGliZGFlZ2VobG1qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNTM3MzAsImV4cCI6MjA5MDgyOTczMH0.vIzDrGHrr8GCwuLsuyYnQDYP9gWmBZbkvdBeUuFKLP4";
+
+// Estas cabeceras de Supabase se incluyen SOLO en los endpoints que ya fueron migrados a RLS (ej: dropi-orders).
+// Los endpoints antiguos envían "Authorization" directamente a Dropi, por lo que NO deben recibir este header.
+const supabaseAuthHeaders = {
+    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+    'apikey': SUPABASE_ANON_KEY
+};
 
 // Datos Centrales
 const credentials = {
@@ -59,7 +67,8 @@ async function testOrders() {
     console.log("=========================================");
     try {
         const ordersResponse = await axios.get(`${PROJECT_URL}/dropi-orders`, {
-            params: { result_number: 10, start: 1 } // Trae las últimas 10
+            params: { result_number: 10, start: 1 }, // Trae las últimas 10
+            headers: supabaseAuthHeaders
         });
         console.log("✅ [ORDERS OK] Status:", ordersResponse.status);
         const responseData = ordersResponse.data;
@@ -414,6 +423,49 @@ async function testPendingIncidences() {
 }
 
 // ==========================================
+// 8. ENDPOINT PRODUCTO (GET)
+// ==========================================
+async function testProduct() {
+    console.log("\n=========================================");
+    console.log("🛍️ PROBANDO ENDPOINT: Detalles de Producto (dropi-product)");
+    console.log("=========================================");
+
+    let productIdInput = await askQuestion("Ingresa el ID del Producto (Presiona Enter para usar 1297563): ");
+    const PRODUCT_ID = productIdInput.trim() || "1297563";
+
+    try {
+        console.log(`\n  📤 Consultando producto ID: ${PRODUCT_ID}...`);
+        const response = await axios.get(`${PROJECT_URL}/dropi-product?id=${PRODUCT_ID}`, {
+            headers: supabaseAuthHeaders
+        });
+        console.log(`✅ [PRODUCT OK] Status: ${response.status}`);
+        
+        const data = response.data.objects || response.data;
+        if (data && data.id) {
+            console.log("\n🔍 Detalles del producto:");
+            console.table([{
+                ID: data.id,
+                Nombre: data.name,
+                Stock: data.stock,
+                Precio_Venta: `$${data.sale_price}`,
+                Precio_Sugerido: `$${data.suggested_price}`,
+                Activo: data.active
+            }]);
+            console.log("📏 Dimensiones (Peso/Largo/Ancho/Alto):", `${data.weight}kg / ${data.length}cm / ${data.width}cm / ${data.height}cm`);
+        } else {
+            console.log("🔍 Respuesta completa:", JSON.stringify(data, null, 2));
+        }
+    } catch (err) {
+        if (err.response && err.response.data && err.response.data.message === "No tiene permisos para ver este producto") {
+            console.log("⚠️ [Aviso de Regocio]: Este producto es PRIVADO de otro proveedor.");
+            console.log("👉 Según la documentación (API_SCHEMA.md), debemos usar dimensiones por defecto en el cotizador (ej: 1x1x1 y peso 1kg).");
+        } else {
+            console.error("❌ Error en Product:", err.response ? JSON.stringify(err.response.data, null, 2) : err.message);
+        }
+    }
+}
+
+// ==========================================
 async function showMenu() {
     let exit = false;
     while (!exit) {
@@ -427,10 +479,11 @@ async function showMenu() {
         console.log("5. Consultar Transportadoras (dropi-distribution-companies)");
         console.log("6. Probar Cotizador Completo Multitransportadora");
         console.log("7. Listar Novedades Pendientes (dropi-pending-incidences)");
+        console.log("8. Consultar Detalles de un Producto (dropi-product)");
         console.log("0. Salir de la Prueba");
         console.log("=========================================");
         
-        const answer = await askQuestion("Elige una opción (0-7): ");
+        const answer = await askQuestion("Elige una opción (0-8): ");
         
         switch (answer.trim()) {
             case '1': await testOrders(); break;
@@ -440,6 +493,7 @@ async function showMenu() {
             case '5': await testDistributionCompanies(); break;
             case '6': await testFreightQuoter(); break;
             case '7': await testPendingIncidences(); break;
+            case '8': await testProduct(); break;
             case '0': 
                 console.log("👋 Saliendo del programa...");
                 exit = true; 
